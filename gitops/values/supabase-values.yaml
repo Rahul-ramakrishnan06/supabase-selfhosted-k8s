@@ -1,0 +1,58 @@
+# Custom Supabase config for local/DC self-host.
+# All secrets come from the ESO-managed "supabase-secrets" via secretRef.
+# Nothing sensitive lives in this file (safe to commit to git for ArgoCD).
+
+secret:
+  jwt:
+    secretRef: supabase-secrets
+    secretRefKey:
+      anonKey: anonKey
+      serviceKey: serviceKey
+      secret: secret
+  db:
+    secretRef: supabase-secrets
+    secretRefKey:
+      password: password
+      database: database
+  dashboard:
+    secretRef: supabase-secrets
+    secretRefKey:
+      username: username
+      password: dashboardPassword
+
+# Bundled Postgres (StatefulSet + PVC). Local/DC: no managed RDS.
+# DC-prod: consider deployment.db.enabled=false + external HA Postgres.
+db:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 8Gi
+
+# Trim what a local/DC install doesn't need.
+analytics:
+  enabled: false      # Logflare needs BigQuery creds; off for local
+functions:
+  enabled: false      # enable if you use edge functions
+imgproxy:
+  enabled: true
+storage:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 8Gi
+
+studio:
+  enabled: true
+
+# Kong = single API gateway entry. ClusterIP; reach via port-forward or the
+# ingress below. DC: front with your own ingress/LB.
+kong:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false    # set true + host once an ingress controller is installed
+
+# Keep local resource use modest.
+auth:
+  environment:
+    DISABLE_SIGNUP: "false"

@@ -1,0 +1,23 @@
+# Your application, deployed by ArgoCD, wired to Supabase.
+# Points at k8s manifests in this repo (gitops/k8s/myapp). Swap path/repo to
+# your app. The app reads Supabase URL + anon key from the shared secret.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Rahul-ramakrishnan06/supabase-selfhosted-k8s.git
+    targetRevision: main
+    path: gitops/k8s/myapp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

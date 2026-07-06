@@ -1,0 +1,16 @@
+# secrets — never commit
+*.env
+supabase-secrets.env
+
+# terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars.local
+
+# kind-written kubeconfig (contains cluster certs)
+infra/01-cluster/supabase-config
+
+# node
+myapp/node_modules/

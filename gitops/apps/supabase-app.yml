@@ -1,0 +1,74 @@
+# Supabase deployed by ArgoCD via Helm.
+# Community chart ships only as a git path (charts/supabase), no helm repo index
+# -> source uses repoURL + path (not chart:).
+#
+# LOCAL variant: values inlined via helm.valuesObject so no second git repo is
+# needed. For real GitOps, move these to $values in a second source (see git
+# history / README) once this repo has a remote.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: supabase
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/supabase-community/supabase-kubernetes.git
+    targetRevision: main
+    path: charts/supabase
+    helm:
+      valuesObject:
+        secret:
+          jwt:
+            secretRef: supabase-secrets
+            secretRefKey:
+              anonKey: anonKey
+              serviceKey: serviceKey
+              secret: secret
+          db:
+            secretRef: supabase-secrets
+            secretRefKey:
+              password: password
+              database: database
+          dashboard:
+            secretRef: supabase-secrets
+            secretRefKey:
+              username: username
+              password: dashboardPassword
+        db:
+          enabled: true
+          persistence:
+            enabled: true
+            size: 8Gi
+        analytics:
+          enabled: false
+        functions:
+          enabled: false
+        imgproxy:
+          enabled: true
+        storage:
+          enabled: true
+          persistence:
+            enabled: true
+            size: 8Gi
+        studio:
+          enabled: true
+        kong:
+          service:
+            type: ClusterIP
+          ingress:
+            enabled: false
+        auth:
+          environment:
+            DISABLE_SIGNUP: "false"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: supabase
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
