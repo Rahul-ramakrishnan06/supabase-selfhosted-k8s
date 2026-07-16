@@ -27,11 +27,11 @@ infra/
   02-platform/   openbao + eso + argocd
 gitops/
   bootstrap/         root app-of-apps (sync this one -> manages the rest)
-  apps/              child ArgoCD Applications (supabase, myapp, platform-secrets)
+  apps/              child ArgoCD Applications (supabase, chat, platform-secrets)
   external-secrets/  ClusterSecretStore + ExternalSecret
   values/            supabase custom values (no secrets inside)
-  k8s/myapp/         sample app k8s manifests
-  myapp/             sample app source (node + supabase-js, Dockerfile)
+  k8s/chat/          chat app k8s manifests + DB migration Job
+  chat/              chat app source (node/express + supabase-js, Dockerfile)
 scripts/
   gen-supabase-secrets.sh   JWT secret + anon/service JWTs (signed, not random)
   seed-openbao.sh           push secrets into OpenBao + ESO token
@@ -54,24 +54,49 @@ cd ../../scripts
 ./gen-supabase-secrets.sh              # writes supabase-secrets.env (git-ignored)
 ./seed-openbao.sh supabase-secrets.env # pushes to OpenBao, makes ESO token
 
-# 4. app-of-apps: sync the root once, ArgoCD manages everything else
-#    (supabase, myapp, platform-secrets = the ESO wiring).
-kubectl apply -f ../gitops/bootstrap/root-app.yml
-kubectl get applications -n argocd   # want all Synced
-kubectl get externalsecret -n supabase   # want SecretSynced
+# 4. supabase + ESO wiring via ArgoCD (these pull public chart / this repo's
+#    committed manifests, so they work without pushing local edits).
+kubectl apply -f ../gitops/apps/platform-secrets-app.yml
+kubectl apply -f ../gitops/apps/supabase-app.yml
+kubectl get applications -n argocd        # want Synced/Healthy
+kubectl get externalsecret -n supabase    # want SecretSynced
 ```
 
-Build the sample app image and load it into the cluster (local, no registry):
+> The chat app is NOT deployed through ArgoCD locally: ArgoCD pulls from the
+> GitHub remote, and the local kind cluster has no image registry (images are
+> hand-loaded into the nodes). So deploy the chat app directly with `kubectl`
+> (below). The `gitops/apps/chat-app.yml` Application is kept for GitOps
+> fidelity — use it once these files live on a remote you control.
+
+### Chat app: build image, migrate DB, deploy
 
 ```bash
-cd gitops/myapp
-docker build --provenance=false -t myapp:local .
-docker save myapp:local -o /tmp/myapp.tar
+# a. build image and load it into the kind nodes (no registry)
+cd gitops/chat
+docker build --provenance=false -t chat-app:local .
+docker save chat-app:local -o /tmp/chat-app.tar
 for n in supabase-worker supabase-control-plane; do
-  docker cp /tmp/myapp.tar $n:/myapp.tar
-  docker exec $n ctr -n k8s.io images import /myapp.tar
+  docker cp /tmp/chat-app.tar $n:/chat-app.tar
+  docker exec $n ctr -n k8s.io images import /chat-app.tar
 done
+
+# b. create the messages table + RLS + realtime publication (idempotent Job)
+kubectl apply -f ../k8s/chat/migration-job.yml
+kubectl -n supabase wait --for=condition=complete job/chat-migration --timeout=180s
+
+# c. deploy the app (namespace, ESO secret, deployment, service)
+kubectl apply -f ../k8s/chat/namespace.yml
+kubectl apply -f ../k8s/chat/external-secret.yml
+kubectl -n chat wait --for=condition=Ready externalsecret/chat-supabase --timeout=120s
+kubectl apply -f ../k8s/chat/deployment.yml
+kubectl -n chat rollout status deploy/chat
+
+# d. open it
+kubectl -n chat port-forward svc/chat 8088:80   # -> http://127.0.0.1:8088
 ```
+
+Sign up with any email/password (local Supabase has email confirmation off),
+then chat — messages persist in Postgres and stream live over Supabase Realtime.
 
 ## Verify per layer (don't big-bang)
 

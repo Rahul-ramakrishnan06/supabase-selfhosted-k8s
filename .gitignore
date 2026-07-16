@@ -13,4 +13,4 @@ crash.log
 infra/01-cluster/supabase-config
 
 # node
-myapp/node_modules/
+node_modules/

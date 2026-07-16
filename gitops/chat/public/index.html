@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Supabase Chat</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        width: 100%;
+        max-width: 640px;
+        height: 100%;
+        max-height: 720px;
+        background: #1e293b;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      }
+      header {
+        padding: 14px 18px;
+        background: #111827;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+      }
+      header small { color: #94a3b8; font-weight: 400; }
+      button {
+        cursor: pointer;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 16px;
+        background: #3ecf8e;
+        color: #062a1c;
+        font-weight: 600;
+      }
+      button.ghost { background: #334155; color: #e2e8f0; }
+      input {
+        width: 100%;
+        padding: 11px 13px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 15px;
+      }
+      #auth { padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+      #auth h2 { margin: 0 0 6px; }
+      .row { display: flex; gap: 10px; }
+      .row button { flex: 1; }
+      #error { color: #f87171; min-height: 18px; font-size: 14px; }
+      #messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg { max-width: 80%; }
+      .msg .who { font-size: 12px; color: #94a3b8; margin-bottom: 2px; }
+      .msg .body {
+        background: #334155;
+        padding: 8px 12px;
+        border-radius: 10px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .msg.mine { align-self: flex-end; text-align: right; }
+      .msg.mine .body { background: #3ecf8e; color: #062a1c; }
+      #composer { display: flex; gap: 10px; padding: 14px; background: #111827; }
+      #composer input { flex: 1; }
+      .hidden { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <!-- Auth view -->
+      <div id="auth">
+        <h2>Supabase Chat</h2>
+        <input id="email" type="email" placeholder="email" autocomplete="username" />
+        <input id="password" type="password" placeholder="password" autocomplete="current-password" />
+        <div class="row">
+          <button id="loginBtn">Log in</button>
+          <button id="signupBtn" class="ghost">Sign up</button>
+        </div>
+        <div id="error"></div>
+      </div>
+
+      <!-- Chat view -->
+      <header class="hidden" id="bar">
+        <span>Supabase Chat <small id="me"></small></span>
+        <button id="logoutBtn" class="ghost">Log out</button>
+      </header>
+      <div id="messages" class="hidden"></div>
+      <form id="composer" class="hidden">
+        <input id="text" placeholder="Type a message…" autocomplete="off" maxlength="2000" />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let token = null;
+      let email = null;
+      let es = null;
+
+      async function api(path, opts = {}) {
+        const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(path, { ...opts, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        return data;
+      }
+
+      function showError(e) { $("error").textContent = e.message || String(e); }
+
+      function addMessage(m) {
+        const wrap = document.createElement("div");
+        wrap.className = "msg" + (m.user_email === email ? " mine" : "");
+        const who = document.createElement("div");
+        who.className = "who";
+        who.textContent = m.user_email;
+        const body = document.createElement("div");
+        body.className = "body";
+        body.textContent = m.content;
+        wrap.append(who, body);
+        const box = $("messages");
+        box.appendChild(wrap);
+        box.scrollTop = box.scrollHeight;
+      }
+
+      function enterChat() {
+        $("auth").classList.add("hidden");
+        for (const id of ["bar", "messages", "composer"]) $(id).classList.remove("hidden");
+        $("me").textContent = `· ${email}`;
+        $("messages").innerHTML = "";
+        loadAndStream();
+      }
+
+      async function loadAndStream() {
+        const history = await api("/api/messages");
+        history.forEach(addMessage);
+        es = new EventSource(`/api/stream?token=${encodeURIComponent(token)}`);
+        es.onmessage = (ev) => addMessage(JSON.parse(ev.data));
+      }
+
+      async function login() {
+        try {
+          const d = await api("/api/login", {
+            method: "POST",
+            body: JSON.stringify({ email: $("email").value, password: $("password").value }),
+          });
+          token = d.access_token;
+          email = d.email;
+          enterChat();
+        } catch (e) { showError(e); }
+      }
+
+      async function signup() {
+        try {
+          await api("/api/signup", {
+            method: "POST",
+            body: JSON.stringify({ email: $("email").value, password: $("password").value }),
+          });
+          $("error").textContent = "Account created. Logging in…";
+          await login();
+        } catch (e) { showError(e); }
+      }
+
+      function logout() {
+        if (es) es.close();
+        token = null;
+        email = null;
+        $("auth").classList.remove("hidden");
+        for (const id of ["bar", "messages", "composer"]) $(id).classList.add("hidden");
+        $("error").textContent = "";
+      }
+
+      $("loginBtn").onclick = login;
+      $("signupBtn").onclick = signup;
+      $("logoutBtn").onclick = logout;
+      $("composer").onsubmit = async (ev) => {
+        ev.preventDefault();
+        const text = $("text").value.trim();
+        if (!text) return;
+        $("text").value = "";
+        try {
+          await api("/api/messages", { method: "POST", body: JSON.stringify({ content: text }) });
+        } catch (e) { showError(e); }
+      };
+    </script>
+  </body>
+</html>

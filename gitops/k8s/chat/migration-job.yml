@@ -1,0 +1,84 @@
+# One-shot schema migration for the chat app. Idempotent -> safe to re-run.
+# Creates public.messages, its RLS policies, and (critically for self-hosted
+# Supabase) adds the table to the supabase_realtime publication -- without that,
+# Realtime is silently dead. Runs in the supabase namespace so it can reach
+# supabase-db and read the DB password from the ESO-managed supabase-secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chat-migration-sql
+  namespace: supabase
+data:
+  init.sql: |
+    create table if not exists public.messages (
+      id         bigint generated always as identity primary key,
+      content    text not null check (char_length(content) between 1 and 2000),
+      user_id    uuid not null references auth.users(id) on delete cascade,
+      user_email text not null,
+      created_at timestamptz not null default now()
+    );
+
+    alter table public.messages enable row level security;
+
+    -- Any signed-in user may read the shared room.
+    do $$ begin
+      create policy "read_all_authenticated" on public.messages
+        for select to authenticated using (true);
+    exception when duplicate_object then null; end $$;
+
+    -- A user may only insert rows attributed to themselves.
+    do $$ begin
+      create policy "insert_own" on public.messages
+        for insert to authenticated with check (user_id = auth.uid());
+    exception when duplicate_object then null; end $$;
+
+    grant select, insert on public.messages to authenticated;
+
+    -- Enable Realtime for this table (idempotent).
+    do $$ begin
+      alter publication supabase_realtime add table public.messages;
+    exception when duplicate_object then null; end $$;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chat-migration
+  namespace: supabase
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: { app: chat-migration }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:15-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              until pg_isready -q; do
+                echo "waiting for postgres..."
+                sleep 3
+              done
+              psql -v ON_ERROR_STOP=1 -f /sql/init.sql
+          env:
+            - name: PGHOST
+              value: "supabase-supabase-db"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: "postgres"
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef: { name: supabase-secrets, key: database }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: supabase-secrets, key: password }
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+      volumes:
+        - name: sql
+          configMap: { name: chat-migration-sql }

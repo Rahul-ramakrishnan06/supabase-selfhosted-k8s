@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+  namespace: chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: chat }
+  template:
+    metadata:
+      labels: { app: chat }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000        # "node" user in node:alpine
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: chat
+          image: chat-app:local
+          imagePullPolicy: IfNotPresent   # image pre-loaded into kind nodes
+          ports:
+            - containerPort: 8080
+          env:
+            # Kong gateway = the Supabase entrypoint, reachable in-cluster.
+            - name: SUPABASE_URL
+              value: "http://supabase-supabase-kong.supabase.svc.cluster.local:8000"
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef: { name: chat-supabase, key: SUPABASE_ANON_KEY }
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef: { name: chat-supabase, key: SUPABASE_SERVICE_KEY }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat
+  namespace: chat
+spec:
+  selector: { app: chat }
+  ports:
+    - port: 80
+      targetPort: 8080

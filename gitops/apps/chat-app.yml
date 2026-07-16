@@ -1,0 +1,27 @@
+# Chat app deployed by ArgoCD, wired to Supabase.
+# Points at the k8s manifests in this repo (gitops/k8s/chat).
+#
+# NOTE (local bring-up): ArgoCD pulls from the Git remote below, so this
+# Application only reflects the chat app once these files are pushed there.
+# For local kind bring-up the image has no registry and is hand-loaded into the
+# nodes, so apply gitops/k8s/chat directly with kubectl instead (see README).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Rahul-ramakrishnan06/supabase-selfhosted-k8s.git
+    targetRevision: main
+    path: gitops/k8s/chat
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chat
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
