@@ -1,0 +1,48 @@
+gitops/chat/.dockerignore
+  s_285f945840418d::t_b9b6e4e2a22f28 1-5
+gitops/k8s/chat/migration-job.yml
+  s_285f945840418d::t_c30ad87c9d7e9c 57,59-65,69-72
+  s_285f945840418d::t_c9632d969adbb0 1-56,58,66-68,73-84
+gitops/chat/package.json
+  s_285f945840418d::t_5a509eb69176d7 1-17
+gitops/chat/public/index.html
+  s_285f945840418d::t_56612d496c1a44 1-207
+gitops/chat/server.js
+  s_285f945840418d::t_7f4e56f8f1f9d3 1-190
+gitops/k8s/chat/deployment.yml
+  s_285f945840418d::t_7d211e9a89df3c 16-17
+  s_285f945840418d::t_80842580f6f634 1-15,18-60
+README.md
+  s_285f945840418d::t_8a843aa5c12439 57-62,65-71,74-77,79-80,82-95,98-99
+  s_285f945840418d::t_cf342243575213 30
+  s_285f945840418d::t_80af0c201f4936 33-34
+  s_285f945840418d::t_b138e117151142 100
+gitops/apps/chat-app.yml
+  s_285f945840418d::t_133d3736d533fb 1-27
+.gitignore
+  s_285f945840418d::t_4aad4c22e20ec0 16
+gitops/chat/Dockerfile
+  s_285f945840418d::t_0b2c40f6fae56c 1-18
+gitops/k8s/chat/namespace.yml
+  s_285f945840418d::t_34520b77a448de 1-4
+gitops/k8s/chat/external-secret.yml
+  s_285f945840418d::t_833d063ea878d0 1-23
+gitops/chat/package-lock.json
+  s_285f945840418d::t_33d1a09288cdfa 1-931
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "2514138e94e3af0d827f6baee1a345a66cf9b876",
+  "prompts": {},
+  "sessions": {
+    "s_285f945840418d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b3ad3c2c-db91-496e-9408-453fe30462e0",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Rahul-ramakrishnan06 <rahulkarthi06@gmail.com>"
+    }
+  }
+}
